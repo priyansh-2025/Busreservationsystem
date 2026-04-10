@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BusRoute — Reservation System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:    #0a0c10; --panel: #0f1218; --border: #1e2530;
+      --amber: #f5a623; --amber2:#ff6b00; --green:  #39ff8f;
+      --dim:   #3a4455; --text:  #c8d4e8; --muted:  #5a6a80;
+      --glass: rgba(255,255,255,0.03);
+      --glow:  0 0 24px rgba(245,166,35,0.18);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Space Mono', monospace; overflow-x: hidden; }
+
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      opacity: 0.5;
+    }
+    body::after {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 50% at 15% 20%, rgba(245,166,35,0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 60% at 85% 80%, rgba(255,107,0,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 40% at 50% 50%, rgba(57,255,143,0.03) 0%, transparent 70%);
+    }
+
+    .app { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; max-width: 900px; margin: 0 auto; padding: 0 24px 60px; }
+
+    header { padding: 36px 0 28px; display: flex; align-items: center; gap: 18px; border-bottom: 1px solid var(--border); margin-bottom: 32px; }
+    .bus-icon { width: 52px; height: 52px; background: linear-gradient(135deg, var(--amber), var(--amber2)); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 0 20px rgba(245,166,35,0.35), inset 0 1px 0 rgba(255,255,255,0.15); flex-shrink: 0; }
+    .header-text h1 { font-family: 'Syne', sans-serif; font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; color: #fff; line-height: 1; }
+    .header-text h1 span { background: linear-gradient(90deg, var(--amber), var(--amber2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .header-text p { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-top: 5px; }
+
+    .status-pill { margin-left: auto; display: flex; align-items: center; gap: 8px; background: var(--glass); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px 6px 10px; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.06em; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); transition: background 0.4s, box-shadow 0.4s; }
+    .status-dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse-dot 2s ease-in-out infinite; }
+    @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .load-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 24px; opacity: 1; transition: opacity 0.6s; }
+    .load-bar-wrap.hidden { opacity: 0; pointer-events: none; }
+    .load-bar { height: 100%; width: 0%; background: linear-gradient(90deg, var(--amber), var(--amber2)); border-radius: 2px; transition: width 0.3s ease; box-shadow: 0 0 10px var(--amber); }
+
+    .route-strip { display: flex; gap: 12px; margin-bottom: 28px; overflow: hidden; }
+    .route-card { flex: 1; min-width: 0; background: var(--glass); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; position: relative; overflow: hidden; }
+    .route-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--amber), transparent); }
+    .rc-label { font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .rc-route { font-family: 'Syne', sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rc-fare  { font-size: 0.72rem; color: var(--amber); margin-top: 4px; }
+
+    .terminal-window { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: var(--glow), 0 24px 60px rgba(0,0,0,0.5); display: flex; flex-direction: column; }
+    .terminal-titlebar { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02); flex-shrink: 0; }
+    .ttb-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .ttb-dot:nth-child(1) { background: #ff5f57; }
+    .ttb-dot:nth-child(2) { background: #ffbd2e; }
+    .ttb-dot:nth-child(3) { background: #28c840; }
+    .ttb-title { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.08em; margin-left: 8px; flex: 1; text-align: center; }
+
+    .terminal-body { position: relative; flex: 1; display: flex; flex-direction: column; }
+    .terminal-body::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px); }
+
+    #output { flex: 1; width: 100%; min-height: 480px; background: transparent; border: none; outline: none; resize: none; padding: 20px 24px; font-family: 'Space Mono', monospace; font-size: 0.8rem; line-height: 1.7; color: #b8f5c8; caret-color: var(--amber); position: relative; z-index: 1; }
+    #output::selection { background: rgba(245,166,35,0.25); }
+
+    .input-row { display: flex; align-items: center; border-top: 1px solid var(--border); background: rgba(255,255,255,0.015); padding: 0 20px; flex-shrink: 0; }
+    .input-prompt { font-size: 0.8rem; color: var(--amber); flex-shrink: 0; padding-right: 10px; user-select: none; }
+    #userInput { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-family: 'Space Mono', monospace; font-size: 0.8rem; padding: 14px 0; caret-color: var(--amber); }
+    #userInput::placeholder { color: var(--dim); }
+    #userInput:disabled, .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .send-btn { background: linear-gradient(135deg, var(--amber), var(--amber2)); border: none; outline: none; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #000; font-size: 16px; transition: opacity 0.15s, transform 0.1s; flex-shrink: 0; }
+    .send-btn:hover:not(:disabled) { opacity: 0.85; }
+    .send-btn:active:not(:disabled) { transform: scale(0.92); }
+
+    footer { text-align: center; padding-top: 28px; font-size: 0.62rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    header           { animation: fadeUp 0.5s ease both; }
+    .route-strip     { animation: fadeUp 0.5s 0.1s ease both; }
+    .terminal-window { animation: fadeUp 0.5s 0.18s ease both; }
+    .terminal-window:focus-within { border-color: rgba(245,166,35,0.3); box-shadow: 0 0 0 1px rgba(245,166,35,0.12), var(--glow), 0 24px 60px rgba(0,0,0,0.5); }
+    #output::-webkit-scrollbar { width: 4px; }
+    #output::-webkit-scrollbar-track { background: transparent; }
+    #output::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="bus-icon">🚌</div>
+    <div class="header-text">
+      <h1>Bus<span>Route</span></h1>
+      <p>Reservation &amp; Ticketing Terminal</p>
+    </div>
+    <div class="status-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Loading…</span>
+    </div>
+  </header>
+
+  <div class="load-bar-wrap" id="loadBarWrap"><div class="load-bar" id="loadBar"></div></div>
+
+  <div class="route-strip" id="routeStrip"></div>
+
+  <div class="terminal-window">
+    <div class="terminal-titlebar">
+      <div class="ttb-dot"></div><div class="ttb-dot"></div><div class="ttb-dot"></div>
+      <div class="ttb-title">bash — busroute@terminal</div>
+    </div>
+    <div class="terminal-body">
+      <textarea id="output" readonly spellcheck="false" placeholder="Initialising BusRoute system…"></textarea>
+    </div>
+    <div class="input-row">
+      <span class="input-prompt">❯</span>
+      <input id="userInput" type="text" placeholder="Type your input and press Enter…" autocomplete="off" spellcheck="false" disabled>
+      <button class="send-btn" id="sendBtn" disabled>↵</button>
+    </div>
+  </div>
+
+  <footer>BusRoute v1.0 &nbsp;·&nbsp; OOP Engine &nbsp;·&nbsp; class Route · class Ticket · class ReservationSystem</footer>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   OOP ENGINE  ─  Route · Ticket · ReservationSystem
+   ═══════════════════════════════════════════════════════════════ */
+
+class Route {
+  constructor(routeID, from, to, fare, seatCapacity) {
+    this.routeID       = routeID;
+    this.from          = from;
+    this.to            = to;
+    this.fare          = fare;           // ₹ per seat
+    this.seatCapacity  = seatCapacity;
+    this.bookedSeats   = new Set();      // seat management
+    this.totalBookings = 0;              // number of tickets issued
+  }
+  isSeatFree(n)    { return n >= 1 && n <= this.seatCapacity && !this.bookedSeats.has(n); }
+  bookSeat(n)      { if (!this.isSeatFree(n)) return false; this.bookedSeats.add(n); return true; }
+  releaseSeat(n)   { this.bookedSeats.delete(n); }
+  availableCount() { return this.seatCapacity - this.bookedSeats.size; }
+}
+
+class Ticket {
+  constructor(ticketID, passengerName, routeID, seatNumbers, totalFare) {
+    this.ticketID      = ticketID;
+    this.passengerName = passengerName;
+    this.routeID       = routeID;
+    this.seatNumbers   = seatNumbers;   // int[]
+    this.totalFare     = totalFare;
+  }
+}
+
+class ReservationSystem {
+  constructor() {
+    this.routes  = new Map();   // routeID  → Route
+    this.tickets = new Map();   // ticketID → Ticket
+    this._counter = 1000;
+    this._seed();
+  }
+
+  _seed() {
+    [
+      new Route('R001', 'Chennai',  'Bangalore', 350, 30),
+      new Route('R002', 'Mumbai',   'Pune',      150, 30),
+      new Route('R003', 'Delhi',    'Jaipur',    250, 30),
+    ].forEach(r => this.routes.set(r.routeID, r));
+  }
+
+  _nextID() { return 'TKT' + (++this._counter); }
+
+  /* Book ticket — validates seat range + double-booking */
+  bookTicket(passengerName, routeID, seatNumbers) {
+    const route = this.routes.get(routeID);
+    if (!route) return { ok: false, msg: 'Route not found.' };
+
+    const dupes = seatNumbers.filter((s, i) => seatNumbers.indexOf(s) !== i);
+    if (dupes.length) return { ok: false, msg: `Duplicate seat(s) in request: ${dupes.join(', ')}.` };
+
+    for (const s of seatNumbers) {
+      if (s < 1 || s > route.seatCapacity)
+        return { ok: false, msg: `Seat ${s} is out of range (valid: 1–${route.seatCapacity}).` };
+      if (!route.isSeatFree(s))
+        return { ok: false, msg: `Seat ${s} is already booked — choose another.` };
+    }
+
+    seatNumbers.forEach(s => route.bookSeat(s));
+    route.totalBookings++;
+
+    const id     = this._nextID();
+    const total  = route.fare * seatNumbers.length;
+    const ticket = new Ticket(id, passengerName, routeID, [...seatNumbers], total);
+    this.tickets.set(id, ticket);
+    return { ok: true, ticket, route };
+  }
+
+  /* Cancel ticket — releases seats, validates ID exists */
+  cancelTicket(ticketID) {
+    const ticket = this.tickets.get(ticketID);
+    if (!ticket) return { ok: false, msg: `No ticket found with ID "${ticketID}".` };
+
+    const route = this.routes.get(ticket.routeID);
+    if (route) {
+      ticket.seatNumbers.forEach(s => route.releaseSeat(s));
+      if (route.totalBookings > 0) route.totalBookings--;
+    }
+    this.tickets.delete(ticketID);
+    return { ok: true, ticket, route };
+  }
+
+  /* Search ticket by ID */
+  searchTicket(ticketID) { return this.tickets.get(ticketID) || null; }
+
+  /* Revenue per route */
+  revenuePerRoute() {
+    return [...this.routes.values()].map(route => {
+      let revenue = 0;
+      for (const t of this.tickets.values())
+        if (t.routeID === route.routeID) revenue += t.totalFare;
+      return { route, revenue };
+    });
+  }
+
+  /* Most popular route (highest bookings) */
+  mostPopularRoute() {
+    let best = null;
+    for (const r of this.routes.values())
+      if (!best || r.totalBookings > best.totalBookings) best = r;
+    return best && best.totalBookings > 0 ? best : null;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TERMINAL UI
+   ═══════════════════════════════════════════════════════════════ */
+
+const statusDot  = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const loadBar    = document.getElementById('loadBar');
+const loadWrap   = document.getElementById('loadBarWrap');
+const outputEl   = document.getElementById('output');
+const inputEl    = document.getElementById('userInput');
+const sendBtn    = document.getElementById('sendBtn');
+
+function setReady() {
+  statusDot.classList.add('active');
+  statusText.textContent = 'Live';
+  loadWrap.classList.add('hidden');
+  inputEl.disabled = false;
+  sendBtn.disabled = false;
+  inputEl.focus();
+}
+
+const print = (line = '') => {
+  outputEl.value += line + '\n';
+  outputEl.scrollTop = outputEl.scrollHeight;
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   DISPLAY HELPERS
+   ═══════════════════════════════════════════════════════════════ */
+
+const sys = new ReservationSystem();
+
+function displayRoutes() {
+  print('');
+  print('  ╔════════╦════════════════════════════╦══════════╦═══════════╗');
+  print('  ║ ID     ║ Journey                    ║ Fare/Seat║ Available ║');
+  print('  ╠════════╬════════════════════════════╬══════════╬═══════════╣');
+  for (const r of sys.routes.values()) {
+    const journey = `${r.from} → ${r.to}`.padEnd(26);
+    const fare    = ('₹ ' + r.fare).padEnd(8);
+    const avail   = `${r.availableCount()}/${r.seatCapacity}`.padEnd(9);
+    print(`  ║ ${r.routeID.padEnd(6)} ║ ${journey} ║ ${fare} ║ ${avail} ║`);
+  }
+  print('  ╚════════╩════════════════════════════╩══════════╩═══════════╝');
+  print('');
+}
+
+function displaySeatMap(route) {
+  print(`\n  Seat map — ${route.from} → ${route.to}   [O = free   X = booked]`);
+  print('  ' + '─'.repeat(54));
+  let row = '  ';
+  for (let i = 1; i <= route.seatCapacity; i++) {
+    row += `[${String(i).padStart(2)}:${route.bookedSeats.has(i) ? 'X' : 'O'}] `;
+    if (i % 6 === 0) { print(row); row = '  '; }
+  }
+  if (row.trim()) print(row);
+  print('');
+}
+
+function printTicketBox(t, r) {
+  print('');
+  print('  ┌──────────────────────────────────────────────────────┐');
+  print('  │                    TICKET DETAILS                     │');
+  print('  ├──────────────────────────────────────────────────────┤');
+  const pad = s => String(s).slice(0, 35).padEnd(35);
+  print(`  │  Ticket ID   :  ${pad(t.ticketID)}│`);
+  print(`  │  Passenger   :  ${pad(t.passengerName)}│`);
+  const journey = r ? `${r.from} → ${r.to}  (${t.routeID})` : t.routeID;
+  print(`  │  Route       :  ${pad(journey)}│`);
+  print(`  │  Seats       :  ${pad(t.seatNumbers.join(', '))}│`);
+  print(`  │  Total Fare  :  ${pad('₹ ' + t.totalFare.toFixed(2))}│`);
+  print('  └──────────────────────────────────────────────────────┘');
+  print('');
+}
+
+function showReport() {
+  const rows    = sys.revenuePerRoute();
+  const popular = sys.mostPopularRoute();
+  print('');
+  print('  ╔════════╦════════════════════════════╦═════════╦══════════╗');
+  print('  ║ ID     ║ Journey                    ║ Tickets ║ Revenue  ║');
+  print('  ╠════════╬════════════════════════════╬═════════╬══════════╣');
+  for (const { route: r, revenue } of rows) {
+    const journey = `${r.from} → ${r.to}`.padEnd(26);
+    const tkts    = String(r.totalBookings).padEnd(7);
+    const rev     = ('₹ ' + revenue).padEnd(8);
+    print(`  ║ ${r.routeID.padEnd(6)} ║ ${journey} ║ ${tkts} ║ ${rev} ║`);
+  }
+  print('  ╠════════╩════════════════════════════╩═════════╩══════════╣');
+  if (popular) {
+    const label = `  🏆  Most popular: ${popular.routeID}  ${popular.from} → ${popular.to}  (${popular.totalBookings} ticket${popular.totalBookings !== 1 ? 's' : ''})`;
+    print(`  ║${label.padEnd(55)}║`);
+  } else {
+    print('  ║  No bookings recorded yet.                                ║');
+  }
+  print('  ╚═══════════════════════════════════════════════════════╝');
+  print('');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATE MACHINE
+   ═══════════════════════════════════════════════════════════════ */
+
+let state = 'BOOT';
+let ctx   = {};
+
+function showMenu() {
+  state = 'MENU';
+  print('');
+  print('  ╔═══════════════════════════════════════════════════════╗');
+  print('  ║          🚌  BusRoute Reservation System              ║');
+  print('  ╠═══════════════════════════════════════════════════════╣');
+  print('  ║   1.  Display Available Routes                        ║');
+  print('  ║   2.  Book a Ticket                                   ║');
+  print('  ║   3.  Cancel a Ticket                                 ║');
+  print('  ║   4.  Search Ticket by ID                             ║');
+  print('  ║   5.  Revenue & Popularity Report                     ║');
+  print('  ║   6.  Exit                                            ║');
+  print('  ╚═══════════════════════════════════════════════════════╝');
+  print('  Enter choice (1–6):');
+}
+
+function handleInput(raw) {
+  const inp = raw.trim();
+
+  switch (state) {
+
+    /* ── Main menu ── */
+    case 'MENU':
+      switch (inp) {
+        case '1': displayRoutes(); showMenu(); break;
+        case '2': print('\n  Enter passenger name:'); state = 'BOOK_NAME'; break;
+        case '3': print('\n  Enter Ticket ID to cancel:'); state = 'CANCEL'; break;
+        case '4': print('\n  Enter Ticket ID to search:'); state = 'SEARCH'; break;
+        case '5': showReport(); showMenu(); break;
+        case '6':
+          print('\n  Goodbye! Thank you for using BusRoute. 👋\n');
+          state = 'DONE';
+          inputEl.disabled = true;
+          sendBtn.disabled = true;
+          statusDot.classList.remove('active');
+          statusText.textContent = 'Offline';
+          break;
+        default:
+          print('  ❌  Invalid choice — please enter a number from 1 to 6:');
+      }
+      break;
+
+    /* ── Step 1: passenger name ── */
+    case 'BOOK_NAME':
+      if (!inp) { print('  ❌  Name cannot be empty. Please enter the passenger name:'); break; }
+      ctx.name = inp;
+      displayRoutes();
+      print('  Enter Route ID (e.g. R001, R002, R003):');
+      state = 'BOOK_ROUTE';
+      break;
+
+    /* ── Step 2: route selection ── */
+    case 'BOOK_ROUTE': {
+      const rid = inp.toUpperCase();
+      if (!sys.routes.has(rid)) { print('  ❌  Invalid Route ID. Try again (R001 / R002 / R003):'); break; }
+      ctx.routeID = rid;
+      const route = sys.routes.get(rid);
+      displaySeatMap(route);
+      print(`  Enter seat number(s) separated by spaces  (1–${route.seatCapacity}):`);
+      state = 'BOOK_SEATS';
+      break;
+    }
+
+    /* ── Step 3: seat selection ── */
+    case 'BOOK_SEATS': {
+      const seats = inp.split(/[\s,]+/).map(Number).filter(n => Number.isInteger(n) && n > 0);
+      if (!seats.length) { print('  ❌  Enter at least one valid seat number:'); break; }
+      const res = sys.bookTicket(ctx.name, ctx.routeID, seats);
+      if (res.ok) {
+        print('\n  ✅  Booking Confirmed!');
+        printTicketBox(res.ticket, res.route);
+      } else {
+        print(`\n  ❌  ${res.msg}`);
+      }
+      ctx = {};
+      showMenu();
+      break;
+    }
+
+    /* ── Cancel by Ticket ID ── */
+    case 'CANCEL': {
+      const res = sys.cancelTicket(inp.toUpperCase());
+      if (res.ok) {
+        const { ticket: t, route: r } = res;
+        print(`\n  ✅  Ticket ${t.ticketID} cancelled successfully.`);
+        print(`     Seats [${t.seatNumbers.join(', ')}] released on ${r ? r.from + ' → ' + r.to : t.routeID}.`);
+        print(`     Refund: ₹ ${t.totalFare.toFixed(2)}`);
+      } else {
+        print(`\n  ❌  ${res.msg}`);
+      }
+      showMenu();
+      break;
+    }
+
+    /* ── Search by Ticket ID ── */
+    case 'SEARCH': {
+      const t = sys.searchTicket(inp.toUpperCase());
+      if (t) {
+        printTicketBox(t, sys.routes.get(t.routeID));
+      } else {
+        print(`\n  ❌  No ticket found with ID "${inp}".`);
+      }
+      showMenu();
+      break;
+    }
+
+    case 'DONE':
+      print('  Session ended — reload the page to start over.');
+      break;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INPUT WIRING
+   ═══════════════════════════════════════════════════════════════ */
+
+function sendInput() {
+  const val = inputEl.value;
+  inputEl.value = '';
+  outputEl.value += val + '\n';
+  outputEl.scrollTop = outputEl.scrollHeight;
+  handleInput(val);
+}
+
+inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendInput(); } });
+sendBtn.addEventListener('click', sendInput);
+
+/* ═══════════════════════════════════════════════════════════════
+   BOOT SEQUENCE
+   ═══════════════════════════════════════════════════════════════ */
+
+[
+  [120,  () => { loadBar.style.width = '18%'; statusText.textContent = 'Loading…'; }],
+  [400,  () => { loadBar.style.width = '45%'; statusText.textContent = 'Loading… 45%'; }],
+  [720,  () => { loadBar.style.width = '72%'; statusText.textContent = 'Loading… 72%'; }],
+  [1050, () => { loadBar.style.width = '94%'; statusText.textContent = 'Loading… 94%'; }],
+  [1350, () => { loadBar.style.width = '100%'; }],
+  [1700, () => {
+    setReady();
+    print('  BusRoute v1.0  —  OOP Reservation Engine');
+    print('  Classes initialised: Route | Ticket | ReservationSystem');
+    print('  3 routes seeded  ·  30 seats each  ·  System ready.');
+    showMenu();
+  }],
+].forEach(([delay, fn]) => setTimeout(fn, delay));
+
+/* ═══════════════════════════════════════════════════════════════
+   DYNAMIC ROUTE CARDS  (top strip mirrors actual Route objects)
+   ═══════════════════════════════════════════════════════════════ */
+
+const strip = document.getElementById('routeStrip');
+for (const r of sys.routes.values()) {
+  const card = document.createElement('div');
+  card.className = 'route-card';
+  card.innerHTML = `
+    <div class="rc-label">Route ${r.routeID}</div>
+    <div class="rc-route">${r.from} → ${r.to}</div>
+    <div class="rc-fare">₹ ${r.fare}.00 / seat · ${r.seatCapacity} seats</div>`;
+  strip.appendChild(card);
+}
+</script>
+</body>
+</html>
